@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Notion Flip Clock (DE)</title>
+  <title>Notion Uhr (DE)</title>
+
   <style>
     :root{
-      --bg:#e9dfd7;              /* beige wie Screenshot */
-      --text:#ffffff;
-      --line:rgba(255,255,255,.22);
-      --muted:rgba(255,255,255,.85);
-      --radius:14px;
+      --bg:#e9dfd7;              /* Hintergrund der Karte */
+      --text:#ffffff;            /* große Uhrzeit */
+      --muted:rgba(255,255,255,.78); /* Datum klein */
+      --radius:18px;
     }
 
     html, body { height:100%; }
@@ -20,71 +20,51 @@
       font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
     }
 
-    /* Widget-Fläche */
+    /* Zentrierung */
     .wrap{
       height:100%;
       display:flex;
       align-items:center;
       justify-content:center;
-      padding:0;
+      padding: 18px;
+      box-sizing:border-box;
     }
 
-    /* Karte wie im Screenshot: 2 Panels nebeneinander */
+    /* Karte */
     .card{
       width:min(980px, 100%);
       aspect-ratio: 16 / 9;
       background: var(--bg);
       border-radius: var(--radius);
-      overflow:hidden;
-      display:grid;
-      grid-template-columns: 1fr 1fr;
-    }
-
-    .panel{
-      position:relative;
       display:flex;
+      flex-direction:column;
       align-items:center;
       justify-content:center;
-    }
-    .panel.left{ border-right:1px solid var(--line); }
-
-    /* horizontale Trennlinie (Flip-Look) */
-    .panel::after{
-      content:"";
-      position:absolute;
-      left:0; right:0;
-      top:50%;
-      height:1px;
-      background: var(--line);
-      transform: translateY(-.5px);
+      position:relative;
+      overflow:hidden;
     }
 
-    /* große Ziffern */
-    .big{
+    /* Große Uhrzeit */
+    .time{
       color: var(--text);
       font-weight: 800;
       letter-spacing: .01em;
-      font-size: clamp(80px, 16vw, 230px);
+      font-size: clamp(84px, 18vw, 240px);
       line-height: 1;
       user-select:none;
     }
 
-    /* kleine Labels unten */
-    .label{
+    /* Kleine Zeile unten: Wochentag + Datum */
+    .date-line{
       position:absolute;
-      bottom:14px;
-      left:14px;
+      bottom: 18px;
+      width:100%;
+      text-align:center;
       color: var(--muted);
-      font-weight: 700;
-      letter-spacing: .10em;
-      font-size: 12px;
-      text-transform: uppercase;
+      font-size: clamp(12px, 2.2vw, 18px);
+      font-weight: 600;
+      letter-spacing: .02em;
       user-select:none;
-    }
-    .label.right{
-      left:auto;
-      right:14px;
-      text-align:right;
     }
   </style>
 </head>
@@ -92,87 +72,55 @@
 <body>
   <div class="wrap">
     <div class="card" aria-label="Uhr-Widget Deutsch">
-      <div class="panel left">
-        <div class="big" id="time">--:--</div>
-        <div class="label" id="ampm"></div>
-      </div>
-      <div class="panel">
-        <div class="big" id="day">----</div>
-        <div class="label right" id="date"></div>
-      </div>
+      <div class="time" id="time">--:--</div>
+      <div class="date-line" id="dateLine">—</div>
     </div>
   </div>
 
   <script>
-    // ✅ Deutsch + deutsche Zeitzone
+    // ✅ Deutsch + deutsche Zeitzone (Berlin)
     const LOCALE = "de-DE";
     const TIMEZONE = "Europe/Berlin";
 
-    // ✅ Wenn du KEIN AM/PM willst: true lassen (wie in DE üblich)
-    const USE_24H = true;
+    // Uhrzeit (24h, wie in DE üblich)
+    const timeFmt = new Intl.DateTimeFormat(LOCALE, {
+      timeZone: TIMEZONE,
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false
+    });
 
-    // optional: Wochentag groß wie im Screenshot
-    const DAY_UPPERCASE = true;
-
-    function pad(n){ return String(n).padStart(2,"0"); }
-
-    function getParts(){
-      // Zeit in Europe/Berlin holen (wichtig: nicht lokale Handy-Zeitzone)
-      const dtf = new Intl.DateTimeFormat(LOCALE, {
-        timeZone: TIMEZONE,
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: !USE_24H
-      });
-
-      const parts = dtf.formatToParts(new Date());
-      const hour = parts.find(p => p.type === "hour")?.value ?? "--";
-      const minute = parts.find(p => p.type === "minute")?.value ?? "--";
-      const dayPeriod = parts.find(p => p.type === "dayPeriod")?.value ?? ""; // bei 12h ggf. "vorm."/"nachm."
-
-      // Wochentag + Datum in Europe/Berlin
+    // Wochentag + Datum (klein unten)
+    // Beispiel: "Donnerstag · 01.01.2026"
+    function formatDateLine(date){
       const weekday = new Intl.DateTimeFormat(LOCALE, {
         timeZone: TIMEZONE,
         weekday: "long"
-      }).format(new Date());
+      }).format(date);
 
-      const date = new Intl.DateTimeFormat(LOCALE, {
+      const numericDate = new Intl.DateTimeFormat(LOCALE, {
         timeZone: TIMEZONE,
         day: "2-digit",
         month: "2-digit",
         year: "numeric"
-      }).format(new Date());
+      }).format(date);
 
-      return { hour, minute, dayPeriod, weekday, date };
+      // Wochentag schön mit großem Anfangsbuchstaben (de-DE liefert das bereits so)
+      return `${weekday} · ${numericDate}`;
     }
 
     function tick(){
-      const { hour, minute, dayPeriod, weekday, date } = getParts();
-
-      document.getElementById("time").textContent = `${hour}:${minute}`;
-
-      // AM/PM in DE ist unüblich — wenn USE_24H=true bleibt es leer.
-      // Falls du 12h willst, zeigt de-DE meist "vorm." / "nachm." (statt AM/PM).
-      document.getElementById("ampm").textContent = USE_24H ? "" : dayPeriod;
-
-      const dayText = DAY_UPPERCASE ? weekday.toUpperCase() : weekday;
-      document.getElementById("day").textContent = dayText;
-
-      document.getElementById("date").textContent = date;
-
-      // zur nächsten Minute sauber aktualisieren
       const now = new Date();
+
+      document.getElementById("time").textContent = timeFmt.format(now);
+      document.getElementById("dateLine").textContent = formatDateLine(now);
+
+      // sauber zur nächsten Minute updaten
       const msToNextMinute = (60 - now.getSeconds()) * 1000 - now.getMilliseconds();
-      setTimeout(tick, Math.max(250, msToNextMinute));
+      setTimeout(tick, Math.max(200, msToNextMinute));
     }
 
     tick();
   </script>
 </body>
 </html>
-
- 
-
- 
-
-
